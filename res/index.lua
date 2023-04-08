@@ -75,9 +75,6 @@ function init()
 
     -- Set up the display
     display = require("res/display")
-
-    -- Track AFK & Control switching between accounts
-    control = require("res/playerControl")
 end
 
 if windower.ffxi.get_info().logged_in then
