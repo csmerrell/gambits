@@ -6,18 +6,11 @@ function ipc.handler(...)
     args = splitArgs(...)
 
     local subArgs = {}
-    if args[1] == "linePos" then
-        for i=2,#args do
-            subArgs[i - 1] = args[i]
-        end
-        return ipc.linePos(subArgs)
-    else
-        for i=3,#args do
-            subArgs[i - 2] = args[i]
-        end
-
-        state.gambitLeaderId = tonumber(args[1])
+    for i=3,#args do
+        subArgs[i - 2] = args[i]
     end
+
+    state.gambitLeaderId = tonumber(args[1])
 
     if ipc[args[2]] then
         return ipc[args[2]](subArgs)
@@ -101,8 +94,11 @@ function ipc.takeLeader()
         windower.send_ipc_message(pl.id.." changeLeader")
     end
     state.gambitLeader = true
-    state.actionEventId = windower.register_event('action', action.handler)
-    display.box:text(display.getText())
+
+    if not state.actionEventId then
+        state.actionEventId = windower.register_event('action', action.handler)
+        display.box:text(display.getText())
+    end
 end
 
 function ipc.sendEngagedTarget(targetId)

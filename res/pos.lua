@@ -30,7 +30,7 @@ pos.lastPos = {
 }
 
 function pos.move()
-    -- pos.checkPlayerControl()
+    pos.checkPlayerControl()
 
     if #pos.moveRegistry == 0 then
         pos.moveDestination = nil
@@ -81,7 +81,6 @@ function pos.isIdle()
     selfMob = windower.ffxi.get_mob_by_target("me")
     if not selfMob then return end
     if pos.lastPos.x == selfMob.x and pos.lastPos.y == selfMob.y then
-        pos.heading = nil
         pos.moving = false
         if os.clock() - pos.lastMovementTime > 900 then
             if tick.on then
@@ -106,18 +105,36 @@ end
 
 function pos.checkPlayerControl()
     local selfMob = windower.ffxi.get_mob_by_target("me")
-    if pos.lastPos.x2 == selfMob.x and pos.lastPos.y2 == selfMob.y then return end
+    if not selfMob then return end
+
+    local lastPos_2 = { x = pos.lastPos.x2, y = pos.lastPos.y2 }
+    if pos.heading and pos.dist(lastPos_2, selfMob) == 0 then
+        pos.heading = nil 
+        return 
+    end
+
+    minThreshold = selfMob.movement_speed / 5
+    if selfMob.status == 85 or selfMob.status == 5 then -- mounted
+        minThreshold = 2
+    end
+    if selfMob and pos.dist(lastPos_2, selfMob) < minThreshold then return end -- threshold too small. Might return false positives.
+
+    -- check if the player has issued controls
+    if not pos.heading then
+        ipc.takeLeader()
+    else
+        lastHeadingDeg = pos.heading * 180 / math.pi
+        currHeadingDeg = pos.getHeadingRadian(lastPos_2, selfMob) * 180 / math.pi
+        headingDiff = lastHeadingDeg - currHeadingDeg
+
+        if math.abs(headingDiff) > 90 then
+            ipc.takeLeader()
+        end
+    end
+
+    -- update the major-tick's lastPos
     pos.lastPos.x2 = selfMob.x
     pos.lastPos.y2 = selfMob.y
-
-    out.msg("checking")
-    if not state.gambitLeader and pos.heading == nil or pos.heading ~= selfMob.facing then
-        if pos.heading then
-            out.msg(pos.heading)
-        end
-        out.msg(selfMob.facing)
-        out.msg("Taking Leader")
-    end
 end
 
 function pos.follow()
@@ -145,7 +162,6 @@ function pos.follow()
     if dist > distThreshold and dist < pos.maxThreshold then
         pos.moving = true
         pos.heading = pos.getHeadingRadian(selfMob, followMob)
-        windower.ffxi.turn(pos.heading)
         windower.ffxi.run(pos.heading)
     elseif pos.moving and settings.followFanRadian and dist < distThreshold + 1 and dist < pos.maxThreshold then
         pos.heading = pos.getHeadingRadian(selfMob, followMob) + settings.followFanRadian
@@ -154,29 +170,31 @@ function pos.follow()
         elseif pos.heading < -1 * math.pi then 
             pos.heading = pos.heading + 2 * math.pi 
         end
-        windower.ffxi.turn(pos.heading)
         windower.ffxi.run(pos.heading)
     elseif settings.followFanRadian then
         pos.fanParty(followMob)
     end
 end
 
+partyIndices = L{"p1","p2","p3","p4","p5"}
 function pos.getFollowMob()
     pos.followEntity = nil
-    if pos.followTarget then
+    if pos.followTarget and partyIndices.contains(pos.followTarget) then
         pos.followEntity = windower.ffxi.get_party()[pos.followTarget]
     else
         party = windower.ffxi.get_party()
         for key, p in pairs(party) do
-            if type(p) == "table" and p.mob and p.mob.id == state.gambitLeaderId then
-                name = ""
-                if pos.followEntity then
-                    name = pos.followEntity.name
-                end
+            if type(p) == "table" and p.mob then
+                if (not pos.followTarget and p.mob.id == state.gambitLeaderId) or pos.followTarget == p.mob.name then
+                    name = ""
+                    if pos.followEntity then
+                        name = pos.followEntity.name
+                    end
 
-                pos.followEntity = p
-                if p.name ~= name then
-                    display.box:text(display.getText())
+                    pos.followEntity = p
+                    if p.name ~= name then
+                        display.box:text(display.getText())
+                    end
                 end
             end
         end
@@ -199,7 +217,6 @@ function pos.fanParty(followTarget)
                 avgRadian2 = math.atan2(math.sin(avgRadian) + math.sin(spreadRadian), math.cos(avgRadian) + math.cos(spreadRadian))
                 pos.heading = avgRadian2
                 pos.moving = true
-                windower.ffxi.turn(pos.heading)
                 windower.ffxi.run(pos.heading)
             end
         end
@@ -233,8 +250,8 @@ function pos.haltFollow()
         end
         
         if fanComplete then
-            pos.heading = pos.getHeadingRadian(selfMob,followMob)
-            windower.ffxi.turn(pos.heading)
+            -- pos.heading = pos.getHeadingRadian(selfMob,followMob)
+            windower.ffxi.turn(pos.getHeadingRadian(selfMob,followMob))
             windower.ffxi.run(false)
         end
     end
@@ -247,7 +264,6 @@ function pos.stayEngaged()
     if not state.gambitLeader and dist > 1.8 then
         pos.moving = true
         pos.heading = pos.getHeadingRadian(selfMob, target)
-        windower.ffxi.turn(pos.heading)
         windower.ffxi.run(pos.heading)
     end
 end
@@ -272,7 +288,6 @@ function pos.moveToPoint()
     if not state.gambitLeader and pos.dist(pos.moveDestination, selfMob) > .5 then
         pos.moving = true
         pos.heading = pos.getHeadingRadian(selfMob, pos.moveDestination)
-        windower.ffxi.turn(pos.heading)
         windower.ffxi.run(pos.heading)
     end
 end
@@ -284,8 +299,10 @@ function pos.haltOnPoint()
     end
 end
 
-function pos.getHeadingRadian(mob_a, mob_b)
-    return -1*math.atan2((mob_b.y - mob_a.y),(mob_b.x - mob_a.x))
+function pos.getHeadingRadian(current_pos, destination_pos)
+    -- current_pos and destination_pos are usually mob entities, but sometimes they're just x/y coordinate tables. 
+    -- Either way, they can be considered purely for their x/y coordinates.
+    return -1*math.atan2((destination_pos.y - current_pos.y),(destination_pos.x - current_pos.x))
 end
 
 function pos.dist(mob_a, mob_b)
