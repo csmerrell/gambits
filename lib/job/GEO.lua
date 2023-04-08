@@ -90,35 +90,17 @@ GEO.jaBuffs = {
 }
 
 GEO.jaRecast = {
-    fullCircle = 345,
-    lastingEmanation = 346,
-    eclipticAttrition = 347,
-    lifeCycle = 349,
-    blazeOfGlory = 350,
-    dematerialize = 351,
-    mendingHalation = 352,
-    radialArcana = 353
+    fullCircle = 243,
+    lastingEmanation = 244,
+    eclipticAttrition = 244,
+    lifeCycle = 246,
+    blazeOfGlory = 247,
+    dematerialize = 248,
+    mendingHalation = 251,
+    radialArcana = 252
 }
 
 GEO.indiActiveId = 612
 GEO.bubbleRange = 6
-
-require('lists')
-function GEO.getTargetMobs(gambit)
-    targetIndices = L{0,1,2,3,4,5}
-    if type(gambit.target) == "table" then
-        targetIndices = L{unpack(gambit.target)}
-    end
-
-    targets = {}
-    party = windower.ffxi.get_party()
-    for key,p in pairs(party) do
-        if type(p) == "table" and p.mob and targetIndices:contains(tonumber(key:sub(2,2))) then
-            table.insert(targets, p.mob)
-        end
-    end
-
-    return targets
-end
 
 return GEO

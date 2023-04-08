@@ -4,7 +4,7 @@ settings.mount = "Crab"
 
 -- Display Box Settings
 settings.pos = {}
-settings.pos.x = 1650
+settings.pos.x = -20
 settings.pos.y = 650
 settings.bg = {}
 settings.bg.alpha = 200

@@ -74,7 +74,8 @@ gambits.blizz = {
 gambits.geoRegen = {
     type = "geomancy",
     name = "regen",
-    target = "all",
+    focus = "p2",
+    target = {0,2},
     minTargets = 3
 }
 gambits.geoWilt = {
@@ -118,8 +119,8 @@ gambits.default = gambitCombine({
     gambits.cure4,
     gambits.cure3,
     -- gambits.blizz,
-    gambits.geoFrailty,
-    gambits.indiFury
+    gambits.geoRegen,
+    gambits.indiRefresh
     -- gambits.protect,
     -- gambits.shell,
 })

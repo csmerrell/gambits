@@ -29,7 +29,6 @@ function ipc.changeLeader(args)
     if state.gambitLeader then
         state.gambitLeader = false
         windower.unregister_event(state.actionEventId)
-        pos.isFollowing = true
         if args[1] then
             settings.followFanRadian = tonumber(args[1])
         end
@@ -95,14 +94,15 @@ function ipc.weaponSkill(args)
 end
 
 -- Sending messages
-function ipc.takeLeader(followFanRadian)
-    if followFanRadian then
-        windower.send_ipc_message(pl.id.." changeLeader "..followFanRadian)
+function ipc.takeLeader()
+    if settings.followFanRadian then
+        windower.send_ipc_message(pl.id.." changeLeader "..settings.followFanRadian)
     else
         windower.send_ipc_message(pl.id.." changeLeader")
     end
     state.gambitLeader = true
     state.actionEventId = windower.register_event('action', action.handler)
+    display.box:text(display.getText())
 end
 
 function ipc.sendEngagedTarget(targetId)

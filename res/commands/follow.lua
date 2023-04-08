@@ -20,19 +20,20 @@ commands.f = commands.follow
 followCmds = {}
 
 function followCmds.on()
-    target = windower.ffxi.get_mob_by_target(pos.followTarget)
+    target = pos.getFollowMob()
     pos.isFollowing = true
+    pos.lockFollowing = false
     if target then
         out.msg("[Gambits]: Following "..target.name..".")
     else
-        out.msg([[[Gambits]: Follow enabled. 
-    Target @]]..pos.followTarget..[[ not found.
-    Follow will resume automatically if a party member that slot is in range.]])
+        out.msg([[[Gambits]: Follow enabled, but no target was found.]])
     end
 end
 
 function followCmds.off()
+    target = pos.getFollowMob()
     pos.isFollowing = false
+    pos.lockFollowing = true
     if target then
         out.msg("[Gambits]: Follow ["..target.name.."] paused.")
     else

@@ -1,5 +1,6 @@
 GEO = require("lib/job/GEO")
 cd = require("util/cooldown")
+targeting = require("util/targeting")
 
 typeEval.geomancy = {}
 
@@ -54,38 +55,78 @@ end
 
 function typeEval.geomancy.buff(gambit)
     if typeEval.geomancy.shouldBuff(gambit) then
-        windower.chat.input(gambit.activation.." <me>")
+        if gambit.target == "leader" then
+            leader = windower.ffxi.get_mob_by_id(state.gambitLeaderId)
+            if leader then
+                windower.chat.input(gambit.activation.." "..leader.index)
+            else
+                windower.chat.input(gambit.activation.." <me>")
+            end
+        else
+            windower.chat.input(gambit.activation.." <me>")
+        end
         return tick.spellcastBufferDelay + gambit.val.cast_time
     end
 
     return 0
 end
 
+require ("lists")
 function typeEval.geomancy.shouldBuff(gambit)
     if pos.moving then return false end
 
     if not state.engagedTargetId and gambit.name ~= "refresh" and gambit.name ~= "regen" then return false end
 
     pet = windower.ffxi.get_mob_by_target("pet")
+    party = windower.ffxi.get_party()
 
     if gambit.target == "any" then
-        return pet == nil
-    elseif gambit.target == "all" or type(gambit.target) == "table" then
-        targets = GEO.getTargetMobs(gambit)
-
-        if pet then
-            pos.cancelPointMove()
-
-            if cd.abilityReady(GEO.jaRecast.fullCircle) and pos.targetsInRadius(pet, targets, GEO.bubbleRange) < gambit.minTargets then
+        if pet == nil then
+            return true
+        else
+            if math.abs(dist(party["p0"].mob, pet)) > GEO.bubbleRange then
                 windower.chat.input('/ja "Full Circle" <me>')
             end
             return false
+        end
+    elseif gambit.target == "leader" then
+        if pet == nil then
+            return true
         else
-            selfMob = windower.ffxi.get_mob_by_target("me")
-            if pos.maxNumInRadius and pos.targetsInRadius(selfMob, targets, GEO.bubbleRange) >= pos.maxNumInRadius then
+            leader = windower.ffxi.get_mob_by_id(state.gambitLeaderId)
+            if leader and math.abs(dist(party["p0"].mob, pet)) > GEO.bubbleRange then
+                windower.chat.input('/ja "Full Circle" <me>')
+            end
+            return false
+        end
+    elseif gambit.target == "all" or type(gambit.target) == "table" then
+
+        if pet then
+            pos.unregisterPointMove("geo")
+            if cd.abilityReady(GEO.jaRecast.fullCircle) then
+                local allTargets = targeting.getPartyTableTargets(gambit)
+                local focusTarget = targeting.getFocusTarget(gambit)
+                local skipIds = L{windower.ffxi.get_mob_by_target("me").id, focusTarget.id}
+                local targets = targeting.getPartyTableTargets(gambit, skipIds)
+                local currentNumInRange = targeting.targetsInRange(pet, allTargets, GEO.bubbleRange)
+                local sweepFit = targeting.angularSweepFit(focusTarget, targets, GEO.bubbleRange)
+                if currentNumInRange < sweepFit.numInRange then
+                    windower.chat.input('/ja "Full Circle" <me>')                    
+                end
+            end
+        elseif gambit.name:lower() == "regen" or gambit.name:lower() == "refresh" or state.engagedTargetId ~= nil then
+            if not typeEval.geomancy.movingToCenter then
+                local focusTarget = targeting.getFocusTarget(gambit)
+                local skipIds = L{windower.ffxi.get_mob_by_target("me").id, focusTarget.id}
+                local targets = targeting.getPartyTableTargets(gambit, skipIds)
+                local sweepFit = targeting.angularSweepFit(focusTarget, targets, GEO.bubbleRange)
+                pos.moveDestination = sweepFit.targetPoint
+                pos.registerPointMove("geo")
+                typeEval.geomancy.movingToCenter = true
+            elseif not pos.moving then
+                typeEval.geomancy.movingToCenter = false
+                windower.chat.input(gambit.activation.." <me>")
                 return true
-            else 
-                return pos.moveToCenter(targets, GEO.bubbleRange) > 0
             end
         end
     end

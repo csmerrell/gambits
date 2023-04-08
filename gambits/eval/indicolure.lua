@@ -19,23 +19,27 @@ function typeEval.indicolure.eval(gambit)
         return tick.spellcastBufferDelay + gambit.val.cast_time
     end
 
-    -- if gambit.target == "any" then
-        return 0
-    -- else
-    --     return typeEval.indicolure.assessMovement(gambit)
-    -- end
+    typeEval.indicolure.assessMovement(gambit)
+    return 0
 end
 
+require ("lists")
 function typeEval.indicolure.assessMovement(gambit)
-    targets = GEO.getTargetMobs(gambit)
+    local selfMob = windower.ffxi.get_mob_by_target("me")
+    local focusTarget = targeting.getFocusTarget(gambit)
+    local skipIds = L{selfMob.id, focusTarget.id}
+    local targets = targeting.getPartyTableTargets(gambit, skipIds)
+    local sweepFit = targeting.angularSweepFit(focusTarget, targets, GEO.bubbleRange)
+    local allTargets = targeting.getPartyTableTargets(gambit)
+    local currentNumInRange = targeting.targetsInRange(selfMob, allTargets, GEO.bubbleRange)
 
-    selfMob = windower.ffxi.get_mob_by_target("me")
 
-    if not pos.maxNumInRadius or pos.targetsInRadius(selfMob, targets, GEO.bubbleRange) < pos.maxNumInRadius then
-        pos.moveToCenter(targets, GEO.bubbleRange)
-        out.msg(pos.maxNumInRadius)
-        return .5
+    if sweepFit.numInRange < 2 then
+        pos.unregisterPointMove("indi")
+    elseif pos.moveDestination and sweepFit.numInRange <= currentNumInRange then
+        return
+    else
+        pos.moveDestination = sweepFit.targetPoint
+        pos.registerPointMove("indi")
     end
-
-    return 0
 end

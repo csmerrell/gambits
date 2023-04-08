@@ -12,7 +12,13 @@ gambitError = require('util/error')
 gambitCopy = require('util/gambitCopy')
 out = require('util/out')
 
-settings = {}
+settings = {
+    flags = {
+        right = true
+    },
+    ui_x_res = 1920
+}
+
 
 pos = {}
 buffUtil = {}

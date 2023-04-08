@@ -27,6 +27,7 @@ windower.register_event('prerender',function ()
         -- Remove any dead targets from considerations; Pop any weapons skills no longer in their SC window
         state.prune()
 
+        if windower.ffxi.get_player().vitals.hpp == 0 then return end
         -- Handle positioning (based on a follow target)
         pos.move()
 

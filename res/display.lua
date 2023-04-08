@@ -11,24 +11,22 @@ function display.getText(displayGambits)
 
     on = "Off"
     if tick.on then on = "On" end
-    text = string.format("== Gambits: [%s] ==\n", on)
 
+    text = ""
     if state.gambitLeader then
-        text = text.."== Gambit Leader ==\n"
+        text = string.format("== Gambits (Leader): [%s] ==\n", on)
+    else
+        text = string.format("== Gambits: [%s] ==\n", on)
     end
 
     if pos.followEntity then
-        if pos.followEntity.mob then
-            if pos.isFollowing then
+        if pos.isFollowing then
+            if pos.followEntity.mob then
                 text = text.."Following:  "..pos.followEntity.name..'\n' 
-            else
-                text = text.."[x] Following (inactive):  "..pos.followEntity.name..'\n' 
+            else            
+                text = text.."[x] Follow:  @"..pos.followEntity.name.." not in zone.\n"
             end
-        else            
-            text = text.."[x] Follow:  @"..pos.followEntity.name.." not in zone.\n"
         end
-    else
-        text = text.."[x] Follow target not found.\n"
     end
 
     text = text.."\n"
@@ -57,7 +55,7 @@ display.box:show()
 override = {}
 override.settings = settings
 override.settings.pos.x = settings.pos.x - 150
-override.box = texts.new(nil, settings)
+override.box = texts.new(nil, override.settings)
 
 function display.showOverride(overrideSet)
     if (settings.windowVisible ~= nil and not settings.windowVisible) or not overrideSet then 

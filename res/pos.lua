@@ -1,11 +1,13 @@
 pos = {}
 
 pos.moving = false
-pos.playerMoving = false
+pos.lockFollowing = false
 pos.isFollowing = true
 if settings.autoFollow ~= nill and not settings.autoFollow then
     pos.isFollowing = false
 end
+pos.moveDestination = nil
+pos.moveRegistry = {}
 pos.followTarget = nil
 pos.followDistance = 2
 if settings.followDistance then
@@ -20,9 +22,20 @@ pos.snapshot = {}
 
 pos.lastMovementTime = os.clock()
 local m = windower.ffxi.get_mob_by_target("me")
-pos.lastPos = { x = m.x, y = m.y }
+pos.lastPos = { 
+    x = m.x, 
+    y = m.y,
+    x2 = m.x, 
+    y2 = m.y 
+}
 
 function pos.move()
+    -- pos.checkPlayerControl()
+
+    if #pos.moveRegistry == 0 then
+        pos.moveDestination = nil
+    end
+
     if state.engagedTargetId and windower.ffxi.get_player().status == 1 then  -- engaged
         pos.stayEngaged()
     elseif pos.moveDestination then
@@ -40,12 +53,14 @@ function pos.halt()
         pos.haltEngaged()
     elseif pos.moveDestination then
         pos.haltOnPoint()
-    elseif pos.isFollowing then 
+    elseif pos.isFollowing and not state.gambitLeader then 
         pos.haltFollow()
     end
 end
 
 function pos.handleLeaderSwaps()
+    if pos.lockFollowing and not pos.isFollowing then return end
+    
     if state.gambitLeader and not pos.snapshot.gambitLeader then
         pos.snapshot = {
             gambitLeader = true,
@@ -53,9 +68,11 @@ function pos.handleLeaderSwaps()
         }
         pos.isFollowing = false
         pos.moveDestination = false
+        display.box:text(display.getText())
     elseif not state.gambitLeader and pos.snapshot.gambitLeader then
         pos.isFollowing = pos.snapshot.isFollowing
         pos.snapshot = {}
+        display.box:text(display.getText())
     end
 end
 
@@ -64,8 +81,8 @@ function pos.isIdle()
     selfMob = windower.ffxi.get_mob_by_target("me")
     if not selfMob then return end
     if pos.lastPos.x == selfMob.x and pos.lastPos.y == selfMob.y then
+        pos.heading = nil
         pos.moving = false
-        pos.playerMoving = false
         if os.clock() - pos.lastMovementTime > 900 then
             if tick.on then
                 pos.restoreTick = true
@@ -75,7 +92,6 @@ function pos.isIdle()
             end
         end
     else
-        pos.moving = true
         if pos.restoreTick then
             tick.on = true
             pos.restoreTick = false
@@ -88,24 +104,25 @@ function pos.isIdle()
     end
 end
 
-function pos.follow()
-    pos.followEntity = nil
-    if pos.followTarget then
-        pos.followEntity = windower.ffxi.get_party()[pos.followTarget]
-    else
-        party = windower.ffxi.get_party()
-        for key, p in pairs(party) do
-            if type(p) == "table" and p.mob and p.mob.id == state.gambitLeaderId then
-                pos.followEntity = p
-            end
+function pos.checkPlayerControl()
+    local selfMob = windower.ffxi.get_mob_by_target("me")
+    if pos.lastPos.x2 == selfMob.x and pos.lastPos.y2 == selfMob.y then return end
+    pos.lastPos.x2 = selfMob.x
+    pos.lastPos.y2 = selfMob.y
+
+    out.msg("checking")
+    if not state.gambitLeader and pos.heading == nil or pos.heading ~= selfMob.facing then
+        if pos.heading then
+            out.msg(pos.heading)
         end
+        out.msg(selfMob.facing)
+        out.msg("Taking Leader")
     end
+end
 
-    selfEnt = windower.ffxi.get_party()['p0']
-    if pos.followEntity == nil or pos.followEntity.zone ~= selfEnt.zone then return end
-
-    followMob = pos.followEntity.mob
-    selfMob = selfEnt.mob
+function pos.follow()
+    followMob = pos.getFollowMob()
+    selfMob = windower.ffxi.get_mob_by_target("me")
     if selfMob == nil or followMob == nil then return end
 
     if not pos.foundNewFollow then -- update the text box once each time a new follow target is assigned
@@ -128,6 +145,7 @@ function pos.follow()
     if dist > distThreshold and dist < pos.maxThreshold then
         pos.moving = true
         pos.heading = pos.getHeadingRadian(selfMob, followMob)
+        windower.ffxi.turn(pos.heading)
         windower.ffxi.run(pos.heading)
     elseif pos.moving and settings.followFanRadian and dist < distThreshold + 1 and dist < pos.maxThreshold then
         pos.heading = pos.getHeadingRadian(selfMob, followMob) + settings.followFanRadian
@@ -136,10 +154,37 @@ function pos.follow()
         elseif pos.heading < -1 * math.pi then 
             pos.heading = pos.heading + 2 * math.pi 
         end
+        windower.ffxi.turn(pos.heading)
         windower.ffxi.run(pos.heading)
     elseif settings.followFanRadian then
         pos.fanParty(followMob)
     end
+end
+
+function pos.getFollowMob()
+    pos.followEntity = nil
+    if pos.followTarget then
+        pos.followEntity = windower.ffxi.get_party()[pos.followTarget]
+    else
+        party = windower.ffxi.get_party()
+        for key, p in pairs(party) do
+            if type(p) == "table" and p.mob and p.mob.id == state.gambitLeaderId then
+                name = ""
+                if pos.followEntity then
+                    name = pos.followEntity.name
+                end
+
+                pos.followEntity = p
+                if p.name ~= name then
+                    display.box:text(display.getText())
+                end
+            end
+        end
+    end
+
+    if not (pos.followEntity and pos.followEntity.mob) then return end
+
+    return pos.followEntity.mob
 end
 
 function pos.fanParty(followTarget)
@@ -154,6 +199,7 @@ function pos.fanParty(followTarget)
                 avgRadian2 = math.atan2(math.sin(avgRadian) + math.sin(spreadRadian), math.cos(avgRadian) + math.cos(spreadRadian))
                 pos.heading = avgRadian2
                 pos.moving = true
+                windower.ffxi.turn(pos.heading)
                 windower.ffxi.run(pos.heading)
             end
         end
@@ -174,7 +220,7 @@ function pos.haltFollow()
 
     distThreshold = pos.followDistance
     dist = pos.dist(selfMob, followMob)
-    if not pos.playerMoving and (dist < distThreshold or dist > pos.maxThreshold) then
+    if dist < distThreshold or dist > pos.maxThreshold then
         fanComplete = true
         party = windower.ffxi.get_party()
         selfMob = party["p0"].mob
@@ -187,30 +233,21 @@ function pos.haltFollow()
         end
         
         if fanComplete then
-            windower.ffxi.turn(pos.getHeadingRadian(selfMob,followMob))
+            pos.heading = pos.getHeadingRadian(selfMob,followMob)
+            windower.ffxi.turn(pos.heading)
             windower.ffxi.run(false)
         end
     end
-end
-
-function pos.targetOffsetPoint(target, dist, offset)
-    local a = math.atan2(target.y, target.x)
-
-    a = a + (target.facing - math.pi)
-
-    local new_x = target.x - dist * math.cos(a + offset)
-    local new_y = target.y - dist * math.sin(a + offset)
-
-    return { x = new_x, y = new_y }
 end
 
 function pos.stayEngaged()
     target = windower.ffxi.get_mob_by_target("t")
     selfMob = windower.ffxi.get_party()['p0'].mob
     dist = pos.dist(selfMob, target)
-    if not pos.playerMoving and dist > 1.8 then
+    if not state.gambitLeader and dist > 1.8 then
         pos.moving = true
         pos.heading = pos.getHeadingRadian(selfMob, target)
+        windower.ffxi.turn(pos.heading)
         windower.ffxi.run(pos.heading)
     end
 end
@@ -225,11 +262,17 @@ function pos.haltEngaged()
     end
 end
 
+function pos.faceTarget(mob_a, mob_b)
+    pos.heading = pos.getHeadingRadian(mob_a, mob_b)
+    windower.ffxi.turn(pos.heading)
+end
+
 function pos.moveToPoint()
     selfMob = windower.ffxi.get_mob_by_target("me")
-    if not pos.playerMoving and pos.dist(pos.moveDestination, selfMob) > .5 then
+    if not state.gambitLeader and pos.dist(pos.moveDestination, selfMob) > .5 then
         pos.moving = true
         pos.heading = pos.getHeadingRadian(selfMob, pos.moveDestination)
+        windower.ffxi.turn(pos.heading)
         windower.ffxi.run(pos.heading)
     end
 end
@@ -239,10 +282,6 @@ function pos.haltOnPoint()
     if pos.dist(pos.moveDestination, selfMob) < .5 then
         windower.ffxi.run(false)
     end
-end
-
-function pos.faceTarget(mob_a, mob_b)
-    windower.ffxi.turn(pos.getHeadingRadian(mob_a, mob_b))
 end
 
 function pos.getHeadingRadian(mob_a, mob_b)
@@ -256,62 +295,26 @@ function pos.dist(mob_a, mob_b)
     return math.sqrt(math.abs(squared))
 end
 
-pos.moveDestination = nil
-pos.maxNumInRadius = nil
-function pos.moveToCenter(targets, targetRadius)
-    if not pos.moveDestination or pos.dist(pos.moveDestination, selfMob) > 2 then
-        bestCenter = pos.findCenter(targets, targetRadius)
-        pos.moveDestination = bestCenter.center
-        pos.maxNumInRadius = bestCenter.numInRadius
-        out.logTable(pos.moveDestination)
-        return 0
-    else
-        return pos.maxNumInRadius
+function pos.registerPointMove(key)
+    found = false
+    for i, k in ipairs(pos.moveRegistry) do
+        if k == key then 
+            found = true
+            break
+        end 
+    end
+    if not found then
+        table.insert(pos.moveRegistry, key)
     end
 end
 
-function pos.cancelPointMove()
-    pos.moveDestination = nil
-end
-
-function pos.findCenter(targets, radius)
-    local maxInRadius = 0
-    local centerPoint = nil
-    
-    if #targets == 1 then
-        return { center = { x = targets[1].x, y = targets[1].y }, numInRadius = 1 }
+function pos.unregisterPointMove(key)
+    for i, k in ipairs(pos.moveRegistry) do
+        if k == key then 
+            table.remove(pos.moveRegistry, i)
+            break
+        end 
     end
-
-    for i = 1, #targets do
-        for j = i+1, #targets do
-            -- Calculate the center point between points[i] and points[j]
-            local center_x = (targets[i].x + targets[j].x) / 2
-            local center_y = (targets[i].y + targets[j].y) / 2
-            localCenter = {x = center_x, y = center_y}
-
-            -- Count the number of points within the radius
-            local numInRadius = pos.targetsInRadius(localCenter, targets, radius)
-            
-            -- Update the max_points_within_radius and center_point if necessary
-            if numInRadius > maxInRadius then
-                maxInRadius = numInRadius
-                centerPoint = localCenter
-            end
-        end
-    end
-    out.logTable(centerPoint)
-    return { center = centerPoint, numInRadius = maxInRadius }
-end
-
-function pos.targetsInRadius(center, targets, radius)
-    num = 0
-    for k = 1, #targets do
-        local distance = math.sqrt((targets[k].x - center.x)^2 + (targets[k].y - center.y)^2)
-        if distance <= radius then
-            num = num + 1
-        end
-    end
-    return num
 end
 
 return pos
